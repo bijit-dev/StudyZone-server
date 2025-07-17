@@ -31,6 +31,16 @@ async function run() {
         const coursesCollection = db.collection("courses");
         const usersCollection = db.collection('users');
 
+        app.get('/users', async (req, res) => {
+            try {
+                const users = await usersCollection.find().toArray();
+                res.status(200).json(users);
+            } catch (error) {
+                console.error('Error fetching courses:', error);
+                res.status(500).send({ message: 'Failed to fetch courses' });
+            }
+        });
+
         // GET: Get user role by email
         app.get('/users/:email/role', async (req, res) => {
             try {
