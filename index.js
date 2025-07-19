@@ -28,18 +28,9 @@ async function run() {
         await client.connect();
 
         const db = client.db('studyZone'); // database name
-        const coursesCollection = db.collection("courses");
+        const sessionsCollection = db.collection("sessions");
         const usersCollection = db.collection('users');
 
-        app.get('/users', async (req, res) => {
-            try {
-                const users = await usersCollection.find().toArray();
-                res.status(200).json(users);
-            } catch (error) {
-                console.error('Error fetching courses:', error);
-                res.status(500).send({ message: 'Failed to fetch courses' });
-            }
-        });
 
         // GET: Get user role by email
         app.get('/users/:email/role', async (req, res) => {
@@ -52,7 +43,7 @@ async function run() {
                 if (!user) {
                     return res.status(404).send({ message: 'User not found' });
                 }
-                res.send({ role: user.role || 'user' });
+                res.send({ role: user.role || 'student' });
             } catch (error) {
                 console.error('Error getting user role:', error);
                 res.status(500).send({ message: 'Failed to get role' });
@@ -72,16 +63,30 @@ async function run() {
             res.send(result);
         })
 
-        // GET: Fetch all courses
-        app.get('/courses', async (req, res) => {
+        // GET: Fetch all sessions
+        app.get('/sessions', async (req, res) => {
             try {
-                const courses = await coursesCollection.find().toArray();
-                res.status(200).json(courses);
+                const sessions = await sessionsCollection.find().toArray();
+                res.status(200).json(sessions);
             } catch (error) {
-                console.error('Error fetching courses:', error);
-                res.status(500).send({ message: 'Failed to fetch courses' });
+                console.error('Error fetching sessions:', error);
+                res.status(500).send({ message: 'Failed to fetch sessions' });
             }
         });
+
+
+        app.post('/session', async (req, res) => {
+            try {
+                const newSessions = req.body;
+                const result = await sessionsCollection.insertOne(newSessions);
+                res.status(201).send(result);
+            } catch (error) {
+                console.error('Error inserting Sessions:', error);
+                res.status(500).send({ message: 'Failed to create Sessions' });
+            }
+        });
+
+        
 
         // Send a ping to confirm a successful connection
         await client.db("admin").command({ ping: 1 });
