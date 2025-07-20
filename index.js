@@ -1,7 +1,7 @@
 require('dotenv').config()
 const express = require('express')
 const cors = require('cors');
-const { MongoClient, ServerApiVersion } = require('mongodb');
+const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 // const admin = require("firebase-admin");
 
 const app = express();
@@ -50,6 +50,17 @@ async function run() {
             }
         });
 
+        // tutors
+        app.get('/tutors', async (req, res) => {
+            try {
+                const result = await usersCollection.find({ role: "teacher" }).toArray();
+                res.send(result);
+            } catch (error) {
+                console.error('Error getting user role:', error);
+                res.status(500).send({ message: 'Failed to get role' });
+            }
+        });
+
         // POST: Create a new user
         app.post('/users', async (req, res) => {
             const email = req.body.email;
@@ -86,7 +97,26 @@ async function run() {
             }
         });
 
-        
+        app.get('/session/:id', async (req, res) => {
+            try {
+                const id = req.params.id;
+                if (!id) {
+                    return res.status(400).send({ message: 'Session ID is required' });
+                }
+                
+                const result = await sessionsCollection.findOne({ _id: new ObjectId(id) });
+                if (!result) {
+                    return res.status(404).send({ message: 'Session not found' });
+                }
+                res.send(result)
+
+            } catch (error) {
+                console.error('Error fetching session:', error);
+                res.status(500).send({ message: 'Failed to fetch session' });
+            }
+        });
+
+
 
         // Send a ping to confirm a successful connection
         await client.db("admin").command({ ping: 1 });
