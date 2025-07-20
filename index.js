@@ -30,6 +30,7 @@ async function run() {
         const db = client.db('studyZone'); // database name
         const sessionsCollection = db.collection("sessions");
         const usersCollection = db.collection('users');
+        const bookedSessionCollection = db.collection('bookedSession');
 
 
         // GET: Get user role by email
@@ -47,6 +48,20 @@ async function run() {
             } catch (error) {
                 console.error('Error getting user role:', error);
                 res.status(500).send({ message: 'Failed to get role' });
+            }
+        });
+
+        app.get('/users/:email', async (req, res) => {
+            const email = req.params.email;
+            try {
+                const user = await usersCollection.findOne({ email });
+                if (user) {
+                    res.json(user);
+                } else {
+                    res.status(404).send("User not found");
+                }
+            } catch (err) {
+                res.status(500).send("Error retrieving user");
             }
         });
 
@@ -85,7 +100,6 @@ async function run() {
             }
         });
 
-
         app.post('/session', async (req, res) => {
             try {
                 const newSessions = req.body;
@@ -103,7 +117,7 @@ async function run() {
                 if (!id) {
                     return res.status(400).send({ message: 'Session ID is required' });
                 }
-                
+
                 const result = await sessionsCollection.findOne({ _id: new ObjectId(id) });
                 if (!result) {
                     return res.status(404).send({ message: 'Session not found' });
@@ -115,6 +129,40 @@ async function run() {
                 res.status(500).send({ message: 'Failed to fetch session' });
             }
         });
+
+        // app.get('/bookings', async (req, res) => {
+        //     try {
+        //         const bookings = await bookedSessionCollection.find().toArray();
+        //         res.status(200).json(bookings);
+        //     } catch (error) {
+        //         console.error('Error fetching sessions:', error);
+        //         res.status(500).send({ message: 'Failed to fetch sessions' });
+        //     }
+        // })
+
+        app.get('/bookings', async (req, res) => {
+            try {
+                const { email } = req.query;
+                if (!email) return res.status(400).send({ error: "Missing email" });
+
+                const result = await bookedSessionCollection.find({ email }).toArray();
+                res.send(result);
+            } catch (err) {
+                res.status(500).send({ error: "Failed to fetch bookings" });
+            }
+        });
+
+
+        app.post('/booking', async (req, res) => {
+            const bookingData = req.body;
+            try {
+                const result = await bookedSessionCollection.insertOne(bookingData);
+                res.send(result);
+            } catch (error) {
+                res.status(500).send("Booking failed");
+            }
+        });
+
 
 
 
