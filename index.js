@@ -31,6 +31,7 @@ async function run() {
         const sessionsCollection = db.collection("sessions");
         const usersCollection = db.collection('users');
         const bookedSessionCollection = db.collection('bookedSession');
+        const reviewsCollection = db.collection('sessionReviews');
 
 
         // GET: Get user role by email
@@ -140,7 +141,7 @@ async function run() {
         //     }
         // })
 
-        app.get('/bookings', async (req, res) => {
+        app.get('/booked', async (req, res) => {
             try {
                 const { email } = req.query;
                 if (!email) return res.status(400).send({ error: "Missing email" });
@@ -152,6 +153,25 @@ async function run() {
             }
         });
 
+        app.get('/booked/:id', async (req, res) => {
+            try {
+                const id = req.params.id;
+                if (!id) {
+                    return res.status(400).send({ message: 'Session ID is required' });
+                }
+
+                const result = await bookedSessionCollection.findOne({ sessionId: id });
+                if (!result) {
+                    return res.status(404).send({ message: 'Session not found' });
+                }
+
+                res.send(result);
+
+            } catch (error) {
+                console.error('Error fetching session:', error);
+                res.status(500).send({ message: 'Failed to fetch session' });
+            }
+        });
 
         app.post('/booking', async (req, res) => {
             const bookingData = req.body;
@@ -162,6 +182,30 @@ async function run() {
                 res.status(500).send("Booking failed");
             }
         });
+
+        app.get('/reviews', async (req, res) => {
+            const { sessionId } = req.query;
+            const reviews = await reviewsCollection.find({ sessionId }).toArray();
+            res.send(reviews);
+        });
+
+        app.post("/reviews", async (req, res) => {
+            try {
+                const { sessionId, reviewerEmail } = req.body;
+                const exists = await reviewsCollection.findOne({ sessionId, reviewerEmail });
+
+                if (exists) {
+                    return res.status(400).send({ message: "You have already reviewed this session." });
+                }
+
+                const result = await reviewsCollection.insertOne(req.body);
+                res.send(result);
+            } catch (error) {
+                console.error("Error submitting review:", error);
+                res.status(500).send({ message: "Failed to submit review" });
+            }
+        });
+
 
 
 
