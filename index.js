@@ -32,6 +32,9 @@ async function run() {
         const usersCollection = db.collection('users');
         const bookedSessionCollection = db.collection('bookedSession');
         const reviewsCollection = db.collection('sessionReviews');
+        const notesCollection = db.collection('notes');
+        const materialsCollection = db.collection("materials");
+
 
 
         // GET: Get user role by email
@@ -131,16 +134,6 @@ async function run() {
             }
         });
 
-        // app.get('/bookings', async (req, res) => {
-        //     try {
-        //         const bookings = await bookedSessionCollection.find().toArray();
-        //         res.status(200).json(bookings);
-        //     } catch (error) {
-        //         console.error('Error fetching sessions:', error);
-        //         res.status(500).send({ message: 'Failed to fetch sessions' });
-        //     }
-        // })
-
         app.get('/booked', async (req, res) => {
             try {
                 const { email } = req.query;
@@ -206,6 +199,170 @@ async function run() {
             }
         });
 
+        app.get('/notes', async (req, res) => {
+            const { email } = req.query;
+            if (!email) {
+                return res.status(400).send({ message: 'Session ID is required' });
+            }
+            try {
+                const notes = await notesCollection.find({ email }).toArray();
+                res.send(notes);
+            } catch (error) {
+                console.error('Error fetching notes:', error);
+                res.status(500).send({ message: 'Failed to fetch notes' });
+            }
+        });
+
+        app.post("/notes", async (req, res) => {
+            try {
+                const note = req.body;
+                const result = await notesCollection.insertOne(note);
+                res.status(201).send(result);
+            } catch (error) {
+                console.error("Error adding note:", error);
+                res.status(500).send({ message: "Failed to add note" });
+            }
+        });
+
+        app.delete("/notes/:id", async (req, res) => {
+            try {
+                const noteId = req.params.id;
+                if (!noteId) {
+                    return res.status(400).send({ message: 'Note ID is required' });
+                }
+
+                const result = await notesCollection.deleteOne({ _id: new ObjectId(noteId) });
+                if (result.deletedCount === 0) {
+                    return res.status(404).send({ message: 'Note not found' });
+                }
+
+                res.send({ message: 'Note deleted successfully', result });
+            } catch (error) {
+                console.error('Error deleting note:', error);
+                res.status(500).send({ message: 'Failed to delete note' });
+            }
+        });
+
+
+        app.put("/notes/:id", async (req, res) => {
+            try {
+                const id = req.params.id;
+                const { title, description } = req.body;
+                const result = await notesCollection.updateOne(
+                    { _id: new ObjectId(id) },
+                    { $set: { title, description } }
+                );
+                res.send(result);
+            } catch (error) {
+                console.error('Error update note:', error);
+                res.status(500).send({ message: 'Failed to update note' });
+            }
+
+        });
+
+        app.get('/my-sessions', async (req, res) => {
+            try {
+                const email = req.query.email;
+
+                if (!email) {
+                    return res.status(400).send({ message: 'Tutor email is required' });
+                }
+
+                // Fetch only sessions created by this tutor that are either approved or rejected
+                const sessions = await sessionsCollection.find({
+                    tutorEmail: email,
+                    status: { $in: ['approved', 'rejected'] }
+                }).toArray();
+
+                res.status(200).send(sessions);
+            } catch (error) {
+                console.error('Error fetching tutor sessions:', error);
+                res.status(500).send({ message: 'Failed to fetch tutor sessions' });
+            }
+        });
+
+        app.put('/tutor/session/request/:id', async (req, res) => {
+            try {
+                const id = req.params.id;
+                const session = await sessionsCollection.findOne({ _id: new ObjectId(id) });
+
+                if (!session) {
+                    return res.status(404).send({ message: 'Session not found' });
+                }
+
+                if (session.status !== 'rejected') {
+                    return res.status(400).send({ message: 'Only rejected sessions can be re-requested' });
+                }
+
+                const result = await sessionsCollection.updateOne(
+                    { _id: new ObjectId(id) },
+                    { $set: { status: 'pending', requestTime: new Date() } }
+                );
+
+                res.send({ message: 'Re-approval request sent', result });
+            } catch (error) {
+                console.error('Error updating session status:', error);
+                res.status(500).send({ message: 'Failed to update session' });
+            }
+        });
+
+        app.post("/materials", async (req, res) => {
+            const { title, sessionId, tutorEmail, imageURL, resourceLink } = req.body;
+
+            if (!title || !sessionId || !tutorEmail || !imageURL || !resourceLink) {
+                return res.status(400).json({ message: "All fields are required." });
+            }
+
+            const result = await db.collection("materials").insertOne({
+                title,
+                sessionId,
+                tutorEmail,
+                imageURL,
+                resourceLink,
+                uploadedAt: new Date(),
+            });
+
+            res.send({ insertedId: result.insertedId });
+        });
+
+
+        // GET /materials?tutorEmail=...
+        app.get('/materials', async (req, res) => {
+            const { tutorEmail } = req.query;
+            const materials = await db.collection("materials").find({ tutorEmail }).toArray();
+            res.send(materials);
+        });
+
+        // DELETE /materials/:id
+        app.delete('/materials/:id', async (req, res) => {
+            const id = req.params.id;
+            const result = await db.collection("materials").deleteOne({ _id: new ObjectId(id) });
+            res.send(result);
+        });
+
+        // PATCH /materials/:id
+        app.patch('/materials/:id', async (req, res) => {
+            const id = req.params.id;
+            const updateDoc = {
+                $set: {
+                    ...req.body,
+                    updatedAt: new Date()
+                }
+            };
+            const result = await db.collection("materials").updateOne({ _id: new ObjectId(id) }, updateDoc);
+            res.send(result);
+        });
+
+        // GET /materials/:sessionId
+        app.get('/materials/:sessionId', async (req, res) => {
+            try {
+                const sessionId = req.params.sessionId;
+                const materials = await materialsCollection.find({ sessionId }).toArray();
+                res.send(materials);
+            } catch (error) {
+                res.status(500).send({ message: "Failed to fetch materials" });
+            }
+        });
 
 
 
