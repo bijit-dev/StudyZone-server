@@ -69,10 +69,63 @@ async function run() {
             }
         });
 
+        // GET all users with optional search
+        app.get('/users', async (req, res) => {
+            const { search } = req.query;
+
+            try {
+                let query = {};
+
+                if (search) {
+                    const regex = new RegExp(search, "i"); // case-insensitive
+                    query = {
+                        $or: [
+                            { name: { $regex: regex } },
+                            { email: { $regex: regex } }
+                        ]
+                    };
+                }
+
+                const users = await usersCollection.find(query).toArray();
+                res.send(users);
+            } catch (error) {
+                console.error('Error fetching users:', error);
+                res.status(500).send({ message: 'Failed to fetch users' });
+            }
+        });
+
+
+        // PATCH update user role
+        app.patch('/users/:id/role', async (req, res) => {
+            const { id } = req.params;
+            const { role } = req.body;
+
+            if (!role) {
+                return res.status(400).send({ message: 'Role is required' });
+            }
+
+            try {
+                const result = await usersCollection.updateOne(
+                    { _id: new ObjectId(id) },
+                    { $set: { role } }
+                );
+
+                if (result.modifiedCount === 0) {
+                    return res.status(404).send({ message: 'User not found or role not updated' });
+                }
+
+                res.send({ message: 'User role updated successfully' });
+            } catch (error) {
+                console.error('Error updating role:', error);
+                res.status(500).send({ message: 'Failed to update role' });
+            }
+        });
+
+
         // tutors
         app.get('/tutors', async (req, res) => {
             try {
-                const result = await usersCollection.find({ role: "teacher" }).toArray();
+                const result = await usersCollection.find({ role: "Tutor" }).toArray();
                 res.send(result);
             } catch (error) {
                 console.error('Error getting user role:', error);
@@ -281,28 +334,23 @@ async function run() {
             }
         });
 
-        app.put('/tutor/session/request/:id', async (req, res) => {
+        app.patch('/sessions/:id/resend', async (req, res) => {
+            const { id } = req.params;
+            const { status } = req.body; // expected to be "pending"
+
             try {
-                const id = req.params.id;
-                const session = await sessionsCollection.findOne({ _id: new ObjectId(id) });
-
-                if (!session) {
-                    return res.status(404).send({ message: 'Session not found' });
-                }
-
-                if (session.status !== 'rejected') {
-                    return res.status(400).send({ message: 'Only rejected sessions can be re-requested' });
-                }
-
-                const result = await sessionsCollection.updateOne(
-                    { _id: new ObjectId(id) },
-                    { $set: { status: 'pending', requestTime: new Date() } }
+                const updateResult = await sessionsCollection.updateOne(
+                    { _id: new ObjectId(id), status: "rejected" },
+                    { $set: { status } }
                 );
 
-                res.send({ message: 'Re-approval request sent', result });
+                if (updateResult.modifiedCount > 0) {
+                    res.send({ message: "Status updated to pending" });
+                } else {
+                    res.status(400).send({ error: "Failed to update session status" });
+                }
             } catch (error) {
-                console.error('Error updating session status:', error);
-                res.status(500).send({ message: 'Failed to update session' });
+                res.status(500).send({ error: "Server error" });
             }
         });
 
