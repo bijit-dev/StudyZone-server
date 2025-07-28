@@ -145,6 +145,33 @@ async function run() {
             res.send(result);
         })
 
+        // GET: Fetch available sessions
+        app.get("/sessions/available", async (req, res) => {
+            try {
+                const sessions = await sessionsCollection
+                    .find({})
+                    .sort({ createdAt: -1 }) // optional: latest first
+                    .limit(6)
+                    .toArray();
+
+                const now = new Date();
+
+                const sessionsWithStatus = sessions.map((session) => {
+                    const registrationEnd = new Date(session.registrationEnd);
+                    const status = now < registrationEnd ? "ongoing" : "closed";
+
+                    return {
+                        session,
+                        status
+                    };
+                });
+
+                res.send(sessionsWithStatus);
+            } catch (err) {
+                res.status(500).send({ message: "Failed to load sessions", error: err.message });
+            }
+        });
+
         // GET: Fetch all sessions
         app.get('/sessions', async (req, res) => {
             try {
