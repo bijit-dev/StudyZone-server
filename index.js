@@ -125,7 +125,7 @@ async function run() {
         // tutors
         app.get('/tutors', async (req, res) => {
             try {
-                const result = await usersCollection.find({ role: "Tutor" }).toArray();
+                const result = await usersCollection.find({ role: "tutor" }).toArray();
                 res.send(result);
             } catch (error) {
                 console.error('Error getting user role:', error);
@@ -361,7 +361,7 @@ async function run() {
                 return res.status(400).json({ message: "All fields are required." });
             }
 
-            const result = await db.collection("materials").insertOne({
+            const result = await materialsCollection.insertOne({
                 title,
                 sessionId,
                 tutorEmail,
@@ -373,18 +373,40 @@ async function run() {
             res.send({ insertedId: result.insertedId });
         });
 
-
         // GET /materials?tutorEmail=...
         app.get('/materials', async (req, res) => {
-            const { tutorEmail } = req.query;
-            const materials = await db.collection("materials").find({ tutorEmail }).toArray();
-            res.send(materials);
+            try {
+                const { email } = req.query;
+                if (!email) {
+                    return res.status(400).send({ message: 'Tutor email is required' });
+                }
+
+                const user = await usersCollection.findOne({ email: email });
+                if (user.role === "student") {
+                    const result = await bookedSessionCollection.find({ email }).toArray();
+                    const sessionIds = result.map(session => session.sessionId);
+                    const materials = await materialsCollection.find({ sessionId: { $in: sessionIds } }).toArray();
+                    res.send(materials);
+                }
+                else if (user.role === "tutor") {
+                    const materials = await materialsCollection.find({ email }).toArray();
+                    res.send(materials);
+                }
+                else if (user.role === "admin") {
+                    const materials = await materialsCollection.find().toArray();
+                    res.send(materials);
+                }
+
+            } catch (error) {
+                console.error('Error fetching materials:', error);
+                res.status(500).send({ message: 'Failed to fetch materials' });
+            }
         });
 
         // DELETE /materials/:id
         app.delete('/materials/:id', async (req, res) => {
             const id = req.params.id;
-            const result = await db.collection("materials").deleteOne({ _id: new ObjectId(id) });
+            const result = await materialsCollection.deleteOne({ _id: new ObjectId(id) });
             res.send(result);
         });
 
@@ -397,7 +419,7 @@ async function run() {
                     updatedAt: new Date()
                 }
             };
-            const result = await db.collection("materials").updateOne({ _id: new ObjectId(id) }, updateDoc);
+            const result = await materialsCollection.updateOne({ _id: new ObjectId(id) }, updateDoc);
             res.send(result);
         });
 
@@ -409,6 +431,102 @@ async function run() {
                 res.send(materials);
             } catch (error) {
                 res.status(500).send({ message: "Failed to fetch materials" });
+            }
+        });
+
+
+        // PATCH approve with payment info
+        app.patch("/sessions/:id/approve", async (req, res) => {
+            const { id } = req.params;
+            const { isPaid, registrationFee } = req.body;
+            const result = await sessionsCollection.updateOne(
+                { _id: new ObjectId(id) },
+                { $set: { status: "approved", isPaid, registrationFee } }
+            );
+            res.send(result);
+        });
+
+        // PATCH reject
+        app.patch("/sessions/:id/reject", async (req, res) => {
+            const { id } = req.params;
+            const result = await sessionsCollection.updateOne(
+                { _id: new ObjectId(id) },
+                { $set: { status: "rejected" } }
+            );
+            res.send(result);
+        });
+
+        // ✅ Get all sessions
+        app.get("/sessions/:id", async (req, res) => {
+            const { id } = req.params;
+
+            try {
+                const session = await sessionsCollection.findOne({ _id: new ObjectId(id) });
+
+                if (!session) {
+                    return res.status(404).send({ message: "Session not found" });
+                }
+
+                res.send(session);  // 🔧 Send back the session to frontend
+            } catch (err) {
+                console.error(err);
+                res.status(500).send({ message: "Internal server error" });
+            }
+        });
+
+        // ✅ Update an approved session
+        app.patch("/sessions/:id", async (req, res) => {
+            const { id } = req.params;
+            let updateData = { ...req.body };
+
+            // Remove _id to prevent immutable field update error
+            if ("_id" in updateData) {
+                delete updateData._id;
+            }
+
+            try {
+                const session = await sessionsCollection.findOne({ _id: new ObjectId(id) });
+
+                if (!session) {
+                    return res.status(404).send({ message: "Session not found" });
+                }
+
+                if (session.status !== "approved") {
+                    return res.status(403).send({ message: "Only approved sessions can be updated" });
+                }
+
+                const result = await sessionsCollection.updateOne(
+                    { _id: new ObjectId(id) },
+                    { $set: updateData }
+                );
+
+                res.send({ message: "Session updated successfully", result });
+            } catch (error) {
+                console.error("Error updating session:", error);
+                res.status(500).send({ message: "Internal server error" });
+            }
+        });
+
+        // ✅ Delete an approved session
+        app.delete("/sessions/:id", async (req, res) => {
+            const { id } = req.params;
+
+            try {
+                const session = await sessionsCollection.findOne({ _id: new ObjectId(id) });
+
+                if (!session) {
+                    return res.status(404).send({ message: "Session not found" });
+                }
+
+                if (session.status !== "approved") {
+                    return res.status(403).send({ message: "Only approved sessions can be deleted" });
+                }
+
+                const result = await sessionsCollection.deleteOne({ _id: new ObjectId(id) });
+                res.send({ message: "Session deleted successfully", result });
+            } catch (err) {
+                console.error(err);
+                res.status(500).send({ message: "Internal server error" });
             }
         });
 
