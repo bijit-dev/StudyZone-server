@@ -121,7 +121,6 @@ async function run() {
             }
         });
 
-
         // tutors
         app.get('/tutors', async (req, res) => {
             try {
@@ -296,7 +295,6 @@ async function run() {
             }
         });
 
-
         app.put("/notes/:id", async (req, res) => {
             try {
                 const id = req.params.id;
@@ -336,12 +334,12 @@ async function run() {
 
         app.patch('/sessions/:id/resend', async (req, res) => {
             const { id } = req.params;
-            const { status } = req.body; // expected to be "pending"
+            const { status, rejectionReason, rejectionFeedback } = req.body; // expected to be "pending"
 
             try {
                 const updateResult = await sessionsCollection.updateOne(
                     { _id: new ObjectId(id), status: "rejected" },
-                    { $set: { status } }
+                    { $set: { status, rejectionReason, rejectionFeedback } }
                 );
 
                 if (updateResult.modifiedCount > 0) {
@@ -446,15 +444,29 @@ async function run() {
             res.send(result);
         });
 
-        // PATCH reject
+        // PATCH reject       
         app.patch("/sessions/:id/reject", async (req, res) => {
             const { id } = req.params;
-            const result = await sessionsCollection.updateOne(
-                { _id: new ObjectId(id) },
-                { $set: { status: "rejected" } }
-            );
-            res.send(result);
+            const { rejectionReason, rejectionFeedback } = req.body;
+
+            try {
+                const result = await sessionsCollection.updateOne(
+                    { _id: new ObjectId(id) },
+                    {
+                        $set: {
+                            status: "rejected",
+                            rejectionReason,
+                            rejectionFeedback,
+                        },
+                    }
+                );
+
+                res.send(result);
+            } catch (err) {
+                res.status(500).send({ message: "Failed to reject session", error: err.message });
+            }
         });
+
 
         // ✅ Get all sessions
         app.get("/sessions/:id", async (req, res) => {
