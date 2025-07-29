@@ -96,7 +96,7 @@ async function run() {
         }
 
         // GET: Get user role by email
-        app.get('/users/:email/role', async (req, res) => {
+        app.get('/users/:email/role', verifyFBToken, async (req, res) => {
             try {
                 const email = req.params.email;
                 if (!email) {
@@ -113,7 +113,7 @@ async function run() {
             }
         });
 
-        app.get('/users/:email', async (req, res) => {
+        app.get('/users/:email', verifyFBToken, async (req, res) => {
             const email = req.params.email;
             try {
                 const user = await usersCollection.findOne({ email });
@@ -128,7 +128,7 @@ async function run() {
         });
 
         // GET all users with optional search
-        app.get('/users', async (req, res) => {
+        app.get('/users', verifyFBToken, async (req, res) => {
             const { search } = req.query;
 
             try {
@@ -154,7 +154,7 @@ async function run() {
 
 
         // PATCH update user role
-        app.patch('/users/:id/role', async (req, res) => {
+        app.patch('/users/:id/role', verifyFBToken, async (req, res) => {
             const { id } = req.params;
             const { role } = req.body;
 
@@ -191,7 +191,7 @@ async function run() {
         });
 
         // POST: Create a new user
-        app.post('/users', async (req, res) => {
+        app.post('/users', verifyFBToken, async (req, res) => {
             const email = req.body.email;
             const userExists = await usersCollection.findOne({ email })
             if (userExists) {
@@ -231,7 +231,7 @@ async function run() {
         });
 
         // GET: Fetch all sessions
-        app.get('/sessions', async (req, res) => {
+        app.get('/sessions', verifyFBToken, async (req, res) => {
             try {
                 const sessions = await sessionsCollection.find().toArray();
                 res.status(200).json(sessions);
@@ -251,7 +251,7 @@ async function run() {
             }
         });
 
-        app.post('/session', async (req, res) => {
+        app.post('/session', verifyFBToken, verifyTutor, async (req, res) => {
             try {
                 const newSessions = req.body;
                 const result = await sessionsCollection.insertOne(newSessions);
@@ -262,7 +262,7 @@ async function run() {
             }
         });
 
-        app.get('/session/:id', async (req, res) => {
+        app.get('/session/:id', verifyFBToken, async (req, res) => {
             try {
                 const id = req.params.id;
                 if (!id) {
@@ -282,7 +282,7 @@ async function run() {
         });
 
         // ✅ Payment intent route
-        app.post('/create-payment-intent', async (req, res) => {
+        app.post('/create-payment-intent', verifyFBToken, verifyStudent,  async (req, res) => {
             const amountInCents = req.body.amountInCents
             try {
                 const paymentIntent = await stripe.paymentIntents.create({
@@ -297,7 +297,7 @@ async function run() {
             }
         });
 
-        app.get('/booked', async (req, res) => {
+        app.get('/booked', verifyFBToken, verifyStudent, async (req, res) => {
             try {
                 const { email } = req.query;
                 if (!email) return res.status(400).send({ error: "Missing email" });
@@ -309,7 +309,7 @@ async function run() {
             }
         });
 
-        app.get('/booked/:id', async (req, res) => {
+        app.get('/booked/:id', verifyFBToken, verifyStudent, async (req, res) => {
             try {
                 const id = req.params.id;
                 if (!id) {
@@ -329,7 +329,7 @@ async function run() {
             }
         });
 
-        app.post('/booking', async (req, res) => {
+        app.post('/booking', verifyFBToken, verifyStudent, async (req, res) => {
             const bookingData = req.body;
             try {
                 const result = await bookedSessionCollection.insertOne(bookingData);
@@ -339,13 +339,13 @@ async function run() {
             }
         });
 
-        app.get('/reviews', async (req, res) => {
+        app.get('/reviews', verifyFBToken, verifyStudent, async (req, res) => {
             const { sessionId } = req.query;
             const reviews = await reviewsCollection.find({ sessionId }).toArray();
             res.send(reviews);
         });
 
-        app.post("/reviews", async (req, res) => {
+        app.post("/reviews", verifyFBToken, verifyStudent, async (req, res) => {
             try {
                 const { sessionId, reviewerEmail } = req.body;
                 const exists = await reviewsCollection.findOne({ sessionId, reviewerEmail });
@@ -362,7 +362,7 @@ async function run() {
             }
         });
 
-        app.get('/notes', async (req, res) => {
+        app.get('/notes', verifyFBToken, verifyStudent, async (req, res) => {
             const { email } = req.query;
             if (!email) {
                 return res.status(400).send({ message: 'Session ID is required' });
@@ -376,7 +376,7 @@ async function run() {
             }
         });
 
-        app.post("/notes", async (req, res) => {
+        app.post("/notes", verifyFBToken, verifyStudent, async (req, res) => {
             try {
                 const note = req.body;
                 const result = await notesCollection.insertOne(note);
@@ -387,7 +387,7 @@ async function run() {
             }
         });
 
-        app.delete("/notes/:id", async (req, res) => {
+        app.delete("/notes/:id", verifyFBToken, verifyStudent, async (req, res) => {
             try {
                 const noteId = req.params.id;
                 if (!noteId) {
@@ -406,7 +406,7 @@ async function run() {
             }
         });
 
-        app.put("/notes/:id", async (req, res) => {
+        app.put("/notes/:id", verifyFBToken, verifyStudent, async (req, res) => {
             try {
                 const id = req.params.id;
                 const { title, description } = req.body;
@@ -422,7 +422,7 @@ async function run() {
 
         });
 
-        app.get('/my-sessions', async (req, res) => {
+        app.get('/my-sessions', verifyFBToken, verifyTutor, async (req, res) => {
             try {
                 const email = req.query.email;
 
@@ -443,7 +443,7 @@ async function run() {
             }
         });
 
-        app.patch('/sessions/:id/resend', async (req, res) => {
+        app.patch('/sessions/:id/resend', verifyFBToken, verifyTutor, async (req, res) => {
             const { id } = req.params;
             const { status, rejectionReason, rejectionFeedback } = req.body; // expected to be "pending"
 
@@ -463,7 +463,7 @@ async function run() {
             }
         });
 
-        app.post("/materials", async (req, res) => {
+        app.post("/materials", verifyFBToken, verifyTutor, async (req, res) => {
             const { title, sessionId, tutorEmail, imageURL, resourceLink } = req.body;
 
             if (!title || !sessionId || !tutorEmail || !imageURL || !resourceLink) {
@@ -482,8 +482,8 @@ async function run() {
             res.send({ insertedId: result.insertedId });
         });
 
-        // GET /materials?tutorEmail=...
-        app.get('/materials', async (req, res) => {
+        // GET /materials for role-based access
+        app.get('/materials', verifyFBToken, async (req, res) => {
             try {
                 const { email } = req.query;
                 if (!email) {
@@ -513,14 +513,14 @@ async function run() {
         });
 
         // DELETE /materials/:id
-        app.delete('/materials/:id', async (req, res) => {
+        app.delete('/materials/:id', verifyFBToken, async (req, res) => {
             const id = req.params.id;
             const result = await materialsCollection.deleteOne({ _id: new ObjectId(id) });
             res.send(result);
         });
 
         // PATCH /materials/:id
-        app.patch('/materials/:id', async (req, res) => {
+        app.patch('/materials/:id', verifyFBToken, async (req, res) => {
             const id = req.params.id;
             const updateDoc = {
                 $set: {
@@ -533,7 +533,7 @@ async function run() {
         });
 
         // GET /materials/:sessionId
-        app.get('/materials/:sessionId', async (req, res) => {
+        app.get('/materials/:sessionId', verifyFBToken, async (req, res) => {
             try {
                 const sessionId = req.params.sessionId;
                 const materials = await materialsCollection.find({ sessionId }).toArray();
@@ -545,7 +545,7 @@ async function run() {
 
 
         // PATCH approve with payment info
-        app.patch("/sessions/:id/approve", async (req, res) => {
+        app.patch("/sessions/:id/approve", verifyFBToken, async (req, res) => {
             const { id } = req.params;
             const { isPaid, registrationFee } = req.body;
             const result = await sessionsCollection.updateOne(
@@ -556,7 +556,7 @@ async function run() {
         });
 
         // PATCH reject       
-        app.patch("/sessions/:id/reject", async (req, res) => {
+        app.patch("/sessions/:id/reject", verifyFBToken, async (req, res) => {
             const { id } = req.params;
             const { rejectionReason, rejectionFeedback } = req.body;
 
@@ -580,7 +580,7 @@ async function run() {
 
 
         // ✅ Get all sessions
-        app.get("/sessions/:id", async (req, res) => {
+        app.get("/sessions/:id", verifyFBToken, async (req, res) => {
             const { id } = req.params;
 
             try {
@@ -590,7 +590,7 @@ async function run() {
                     return res.status(404).send({ message: "Session not found" });
                 }
 
-                res.send(session);  // 🔧 Send back the session to frontend
+                res.send(session);  
             } catch (err) {
                 console.error(err);
                 res.status(500).send({ message: "Internal server error" });
@@ -598,7 +598,7 @@ async function run() {
         });
 
         // ✅ Update an approved session
-        app.patch("/sessions/:id", async (req, res) => {
+        app.patch("/sessions/:id", verifyFBToken, verifyAdmin, async (req, res) => {
             const { id } = req.params;
             let updateData = { ...req.body };
 
@@ -631,7 +631,7 @@ async function run() {
         });
 
         // ✅ Delete an approved session
-        app.delete("/sessions/:id", async (req, res) => {
+        app.delete("/sessions/:id", verifyFBToken, verifyAdmin, async (req, res) => {
             const { id } = req.params;
 
             try {
@@ -652,9 +652,6 @@ async function run() {
                 res.status(500).send({ message: "Internal server error" });
             }
         });
-
-
-
 
         // Send a ping to confirm a successful connection
         // await client.db("admin").command({ ping: 1 });
