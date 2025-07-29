@@ -1,8 +1,9 @@
-require('dotenv').config()
+require('dotenv').config();
 const express = require('express')
 const cors = require('cors');
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 // const admin = require("firebase-admin");
+const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 
 const app = express();
 const port = process.env.PORT || 5000;
@@ -12,6 +13,8 @@ app.use(cors());
 app.use(express.json());
 
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.ict2m8x.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
+
+
 
 // Create a MongoClient with a MongoClientOptions object to set the Stable API version
 const client = new MongoClient(uri, {
@@ -25,16 +28,37 @@ const client = new MongoClient(uri, {
 async function run() {
     try {
         // Connect the client to the server	(optional starting in v4.7)
-        await client.connect();
 
         const db = client.db('studyZone'); // database name
         const sessionsCollection = db.collection("sessions");
         const usersCollection = db.collection('users');
         const bookedSessionCollection = db.collection('bookedSession');
+        const paymentsCollection = db.collection('payments');
         const reviewsCollection = db.collection('sessionReviews');
         const notesCollection = db.collection('notes');
         const materialsCollection = db.collection("materials");
 
+
+        const verifyFBToken = async (req, res, next) => {
+            const authHeader = req.headers.authorization;
+            if (!authHeader) {
+                return res.status(401).send({ message: 'unauthorized access' })
+            }
+            const token = authHeader.split(' ')[1];
+            if (!token) {
+                return res.status(401).send({ message: 'unauthorized access' })
+            }
+
+            // verify the token
+            try {
+                const decoded = await admin.auth().verifyIdToken(token);
+                req.decoded = decoded;
+                next();
+            }
+            catch (error) {
+                return res.status(403).send({ message: 'forbidden access' })
+            }
+        }
 
 
         // GET: Get user role by email
@@ -183,6 +207,16 @@ async function run() {
             }
         });
 
+        app.get('/study-sessions', async (req, res) => {
+            try {
+                const sessions = await sessionsCollection.find({ status: "approved" }).toArray();
+                res.status(200).json(sessions);
+            } catch (error) {
+                console.error('Error fetching approved sessions:', error);
+                res.status(500).send({ message: 'Failed to fetch approved sessions' });
+            }
+        });
+
         app.post('/session', async (req, res) => {
             try {
                 const newSessions = req.body;
@@ -210,6 +244,22 @@ async function run() {
             } catch (error) {
                 console.error('Error fetching session:', error);
                 res.status(500).send({ message: 'Failed to fetch session' });
+            }
+        });
+
+        // ✅ Payment intent route
+        app.post('/create-payment-intent', async (req, res) => {
+            const amountInCents = req.body.amountInCents
+            try {
+                const paymentIntent = await stripe.paymentIntents.create({
+                    amount: amountInCents, // Amount in cents
+                    currency: 'usd',
+                    payment_method_types: ['card'],
+                });
+
+                res.json({ clientSecret: paymentIntent.client_secret });
+            } catch (error) {
+                res.status(500).json({ error: error.message });
             }
         });
 
@@ -573,8 +623,8 @@ async function run() {
 
 
         // Send a ping to confirm a successful connection
-        await client.db("admin").command({ ping: 1 });
-        console.log("Pinged your deployment. You successfully connected to MongoDB!");
+        // await client.db("admin").command({ ping: 1 });
+        // console.log("Pinged your deployment. You successfully connected to MongoDB!");
     } finally {
         // Ensures that the client will close when you finish/error
     }
