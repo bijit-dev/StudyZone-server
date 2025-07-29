@@ -2,7 +2,7 @@ require('dotenv').config();
 const express = require('express')
 const cors = require('cors');
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
-// const admin = require("firebase-admin");
+const admin = require("firebase-admin");
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 
 const app = express();
@@ -12,9 +12,15 @@ const port = process.env.PORT || 5000;
 app.use(cors());
 app.use(express.json());
 
+const decodedKey = Buffer.from(process.env.FB_SERVICE_KEY, 'base64').toString('utf8');
+
+const serviceAccount = JSON.parse(decodedKey);
+
+admin.initializeApp({
+    credential: admin.credential.cert(serviceAccount)
+});
+
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.ict2m8x.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
-
-
 
 // Create a MongoClient with a MongoClientOptions object to set the Stable API version
 const client = new MongoClient(uri, {
@@ -28,12 +34,10 @@ const client = new MongoClient(uri, {
 async function run() {
     try {
         // Connect the client to the server	(optional starting in v4.7)
-
         const db = client.db('studyZone'); // database name
         const sessionsCollection = db.collection("sessions");
         const usersCollection = db.collection('users');
         const bookedSessionCollection = db.collection('bookedSession');
-        const paymentsCollection = db.collection('payments');
         const reviewsCollection = db.collection('sessionReviews');
         const notesCollection = db.collection('notes');
         const materialsCollection = db.collection("materials");
@@ -60,6 +64,36 @@ async function run() {
             }
         }
 
+        // Middleware to verify user role
+        const verifyAdmin = async (req, res, next) => {
+            const email = req.decoded.email;
+            const query = { email }
+            const user = await usersCollection.findOne(query);
+            if (!user || user.role !== 'admin') {
+                return res.status(403).send({ message: 'forbidden access' })
+            }
+            next();
+        }
+
+        const verifyTutor = async (req, res, next) => {
+            const email = req.decoded.email;
+            const query = { email }
+            const user = await usersCollection.findOne(query);
+            if (!user || user.role !== 'tutor') {
+                return res.status(403).send({ message: 'forbidden access' })
+            }
+            next();
+        }
+
+        const verifyStudent = async (req, res, next) => {
+            const email = req.decoded.email;
+            const query = { email }
+            const user = await usersCollection.findOne(query);
+            if (!user || user.role !== 'student') {
+                return res.status(403).send({ message: 'forbidden access' })
+            }
+            next();
+        }
 
         // GET: Get user role by email
         app.get('/users/:email/role', async (req, res) => {
