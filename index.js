@@ -191,7 +191,7 @@ async function run() {
         });
 
         // POST: Create a new user
-        app.post('/users', verifyFBToken, async (req, res) => {
+        app.post('/users', async (req, res) => {
             const email = req.body.email;
             const userExists = await usersCollection.findOne({ email })
             if (userExists) {
