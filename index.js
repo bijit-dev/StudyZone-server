@@ -204,10 +204,11 @@ async function run() {
         })
 
         // GET: Fetch available sessions
+        // GET: Fetch available approved sessions
         app.get("/sessions/available", async (req, res) => {
             try {
                 const sessions = await sessionsCollection
-                    .find({})
+                    .find({ status: "approved" }) // Only approved sessions
                     .sort({ createdAt: -1 }) // optional: latest first
                     .limit(6)
                     .toArray();
@@ -229,6 +230,7 @@ async function run() {
                 res.status(500).send({ message: "Failed to load sessions", error: err.message });
             }
         });
+
 
         // GET: Fetch all sessions
         app.get('/sessions', verifyFBToken, async (req, res) => {
