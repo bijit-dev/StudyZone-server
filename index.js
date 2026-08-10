@@ -10,7 +10,11 @@ const app = express();
 const port = process.env.PORT || 5000;
 
 // Middleware 
-app.use(cors());
+app.use(cors({
+  origin: "https://studyzone-fab15.web.app",
+  credentials: true,
+  methods: ["GET", "POST", "OPTIONS"],
+}));
 app.use(express.json());
 
 const decodedKey = Buffer.from(process.env.FB_SERVICE_KEY, 'base64').toString('utf8');
