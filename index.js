@@ -11,7 +11,7 @@ const port = process.env.PORT || 5000;
 
 // Middleware 
 app.use(cors({
-  origin: "https://studyzone-fab15.web.app",
+  origin: process.env.CLIENT_SITE,
   credentials: true,
   methods: ["GET", "POST", "OPTIONS"],
 }));
