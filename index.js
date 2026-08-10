@@ -1,6 +1,7 @@
 require('dotenv').config();
 const express = require('express')
 const cors = require('cors');
+const dns = require('dns');
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const admin = require("firebase-admin");
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
@@ -20,10 +21,16 @@ admin.initializeApp({
     credential: admin.credential.cert(serviceAccount)
 });
 
-const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.ict2m8x.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
+const url = process.env.MONGODB_URI || `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.hbxtbz2.mongodb.net/?appName=Cluster0`;
+
+// Workaround: a virtual network adapter may leave DNS pointed at 127.0.0.1,
+// which makes every Mongo query fail with ECONNREFUSED (_mongodb._tcp...)
+if (dns.getServers().some((s) => s.startsWith('127.'))) {
+    dns.setServers(['8.8.8.8', '1.1.1.1']);
+}
 
 // Create a MongoClient with a MongoClientOptions object to set the Stable API version
-const client = new MongoClient(uri, {
+const client = new MongoClient(url, {
     serverApi: {
         version: ServerApiVersion.v1,
         strict: true,
@@ -34,7 +41,7 @@ const client = new MongoClient(uri, {
 async function run() {
     try {
         // Connect the client to the server	(optional starting in v4.7)
-        const db = client.db('studyZone'); // database name
+        const db = client.db('studyZone_DB'); // database name
         const sessionsCollection = db.collection("sessions");
         const usersCollection = db.collection('users');
         const bookedSessionCollection = db.collection('bookedSession');
@@ -66,33 +73,45 @@ async function run() {
 
         // Middleware to verify user role
         const verifyAdmin = async (req, res, next) => {
-            const email = req.decoded.email;
-            const query = { email }
-            const user = await usersCollection.findOne(query);
-            if (!user || user.role !== 'admin') {
-                return res.status(403).send({ message: 'forbidden access' })
+            try {
+                const email = req.decoded.email;
+                const query = { email }
+                const user = await usersCollection.findOne(query);
+                if (!user || user.role !== 'admin') {
+                    return res.status(403).send({ message: 'forbidden access' })
+                }
+                next();
+            } catch (error) {
+                return res.status(500).send({ message: 'internal server error' });
             }
-            next();
         }
 
         const verifyTutor = async (req, res, next) => {
-            const email = req.decoded.email;
-            const query = { email }
-            const user = await usersCollection.findOne(query);
-            if (!user || user.role !== 'tutor') {
-                return res.status(403).send({ message: 'forbidden access' })
+            try {
+                const email = req.decoded.email;
+                const query = { email }
+                const user = await usersCollection.findOne(query);
+                if (!user || user.role !== 'tutor') {
+                    return res.status(403).send({ message: 'forbidden access' })
+                }
+                next();
+            } catch (error) {
+                return res.status(500).send({ message: 'internal server error' });
             }
-            next();
         }
 
         const verifyStudent = async (req, res, next) => {
-            const email = req.decoded.email;
-            const query = { email }
-            const user = await usersCollection.findOne(query);
-            if (!user || user.role !== 'student') {
-                return res.status(403).send({ message: 'forbidden access' })
+            try {
+                const email = req.decoded.email;
+                const query = { email }
+                const user = await usersCollection.findOne(query);
+                if (!user || user.role !== 'student') {
+                    return res.status(403).send({ message: 'forbidden access' })
+                }
+                next();
+            } catch (error) {
+                return res.status(500).send({ message: 'internal server error' });
             }
-            next();
         }
 
         // GET: Get user role by email
@@ -192,15 +211,23 @@ async function run() {
 
         // POST: Create a new user
         app.post('/users', async (req, res) => {
-            const email = req.body.email;
-            const userExists = await usersCollection.findOne({ email })
-            if (userExists) {
-                // update last log in
-                return res.status(200).send({ message: 'User already exists', inserted: false });
+            try {
+                const email = req.body.email;
+                if (!email) {
+                    return res.status(400).send({ message: 'Email is required' });
+                }
+                const userExists = await usersCollection.findOne({ email })
+                if (userExists) {
+                    // update last log in
+                    return res.status(200).send({ message: 'User already exists', inserted: false });
+                }
+                const user = req.body;
+                const result = await usersCollection.insertOne(user);
+                res.send(result);
+            } catch (error) {
+                console.error('Error creating user:', error);
+                res.status(500).send({ message: 'Failed to create user' });
             }
-            const user = req.body;
-            const result = await usersCollection.insertOne(user);
-            res.send(result);
         })
 
         // GET: Fetch available sessions
@@ -283,9 +310,12 @@ async function run() {
             }
         });
 
-        // ✅ Payment intent route
-        app.post('/create-payment-intent', verifyFBToken, verifyStudent,  async (req, res) => {
+        // Payment intent route
+        app.post('/create-payment-intent', verifyFBToken, verifyStudent, async (req, res) => {
             const amountInCents = req.body.amountInCents
+            if (!amountInCents || amountInCents <= 0 || isNaN(amountInCents)) {
+                return res.status(400).json({ error: "Invalid amount" });
+            }
             try {
                 const paymentIntent = await stripe.paymentIntents.create({
                     amount: amountInCents, // Amount in cents
@@ -342,9 +372,17 @@ async function run() {
         });
 
         app.get('/reviews', verifyFBToken, verifyStudent, async (req, res) => {
-            const { sessionId } = req.query;
-            const reviews = await reviewsCollection.find({ sessionId }).toArray();
-            res.send(reviews);
+            try {
+                const { sessionId } = req.query;
+                if (!sessionId) {
+                    return res.status(400).send({ message: 'Session ID is required' });
+                }
+                const reviews = await reviewsCollection.find({ sessionId }).toArray();
+                res.send(reviews);
+            } catch (error) {
+                console.error('Error fetching reviews:', error);
+                res.status(500).send({ message: 'Failed to fetch reviews' });
+            }
         });
 
         app.post("/reviews", verifyFBToken, verifyStudent, async (req, res) => {
@@ -367,7 +405,7 @@ async function run() {
         app.get('/notes', verifyFBToken, verifyStudent, async (req, res) => {
             const { email } = req.query;
             if (!email) {
-                return res.status(400).send({ message: 'Session ID is required' });
+                return res.status(400).send({ message: 'Email is required' });
             }
             try {
                 const notes = await notesCollection.find({ email }).toArray();
@@ -449,6 +487,10 @@ async function run() {
             const { id } = req.params;
             const { status, rejectionReason, rejectionFeedback } = req.body; // expected to be "pending"
 
+            if (status !== "pending") {
+                return res.status(400).send({ error: "Status can only be reset to pending" });
+            }
+
             try {
                 const updateResult = await sessionsCollection.updateOne(
                     { _id: new ObjectId(id), status: "rejected" },
@@ -489,25 +531,30 @@ async function run() {
             try {
                 const { email } = req.query;
                 if (!email) {
-                    return res.status(400).send({ message: 'Tutor email is required' });
+                    return res.status(400).send({ message: 'Email is required' });
                 }
 
                 const user = await usersCollection.findOne({ email: email });
+                if (!user) {
+                    return res.status(404).send({ message: 'User not found' });
+                }
+
                 if (user.role === "student") {
                     const result = await bookedSessionCollection.find({ email }).toArray();
                     const sessionIds = result.map(session => session.sessionId);
                     const materials = await materialsCollection.find({ sessionId: { $in: sessionIds } }).toArray();
-                    res.send(materials);
+                    return res.send(materials);
                 }
                 else if (user.role === "tutor") {
-                    const materials = await materialsCollection.find({ email }).toArray();
-                    res.send(materials);
+                    const materials = await materialsCollection.find({ tutorEmail: email }).toArray();
+                    return res.send(materials);
                 }
                 else if (user.role === "admin") {
                     const materials = await materialsCollection.find().toArray();
-                    res.send(materials);
+                    return res.send(materials);
                 }
 
+                return res.status(403).send({ message: 'Unknown role' });
             } catch (error) {
                 console.error('Error fetching materials:', error);
                 res.status(500).send({ message: 'Failed to fetch materials' });
@@ -581,7 +628,7 @@ async function run() {
         });
 
 
-        // ✅ Get all sessions
+        // Get all sessions
         app.get("/sessions/:id", verifyFBToken, async (req, res) => {
             const { id } = req.params;
 
@@ -599,7 +646,7 @@ async function run() {
             }
         });
 
-        // ✅ Update an approved session
+        // Update an approved session
         app.patch("/sessions/:id", verifyFBToken, verifyAdmin, async (req, res) => {
             const { id } = req.params;
             let updateData = { ...req.body };
@@ -632,7 +679,7 @@ async function run() {
             }
         });
 
-        // ✅ Delete an approved session
+        // Delete an approved session
         app.delete("/sessions/:id", verifyFBToken, verifyAdmin, async (req, res) => {
             const { id } = req.params;
 
