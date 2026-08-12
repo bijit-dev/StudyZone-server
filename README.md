@@ -51,3 +51,23 @@ The API root responds at:
 ```text
 GET /
 ```
+
+## Vercel Deploy
+
+Add these environment variables in Vercel Project Settings:
+
+```text
+MONGODB_URI
+FB_SERVICE_KEY
+STRIPE_SECRET_KEY
+```
+
+Optional fallback variables:
+
+```text
+DB_USER
+DB_PASS
+PORT
+```
+
+For MongoDB Atlas, allow Vercel serverless access in Network Access. During development or class projects, `0.0.0.0/0` is commonly used, but a tighter allowlist is better for production.
